@@ -34,6 +34,13 @@ async function run() {
       res.send(result);
     });
 
+    app.get('/toprated', async (req, res) => {
+      const query = { id: { $in: ['d1', 'd2', 'd8'] } };
+      const cursor = doctorsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
     app.get('/doctors/:doctorsId', async (req, res) => {
       const doctorsId = req.params.doctorsId;
       const query = { _id: new ObjectId(doctorsId) };
