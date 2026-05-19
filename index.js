@@ -2,6 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 dotenv.config();
 const app = express();
 app.use(cors());
@@ -10,7 +11,6 @@ const port = process.env.PORT || 8080;
 
 const uri = process.env.MONGODB_URI;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -19,12 +19,29 @@ const client = new MongoClient(uri, {
   },
 });
 
+const JWKS = createRemoteJWKSet(new URL('http://localhost:3000/api/auth/jwks'));
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req?.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: 'unauthorized' });
+  }
+  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ message: 'unauthorized' });
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    next();
+  } catch (error) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+};
+
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-    // Send a ping to confirm a successful connection
-    // await client.db('admin').command({ ping: 1 });
     const db = client.db('healnycdb');
     const doctorsCollection = db.collection('doctors');
     const bookingCollection = db.collection('booking');
@@ -65,21 +82,20 @@ async function run() {
       res.send(result);
     });
 
-    app.get('/doctors/:doctorsId', async (req, res) => {
+    app.get('/doctors/:doctorsId', verifyToken, async (req, res) => {
       const doctorsId = req.params.doctorsId;
       const query = { _id: new ObjectId(doctorsId) };
       const result = await doctorsCollection.findOne(query);
       res.send(result);
     });
 
-    app.post('/booking', async (req, res) => {
+    app.post('/booking', verifyToken, async (req, res) => {
       const bookingData = req.body;
       const result = await bookingCollection.insertOne(bookingData);
-
       res.json(result);
     });
 
-    app.get('/booking/:email', async (req, res) => {
+    app.get('/booking/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
       const query = { userEmail: email };
       const cursor = bookingCollection.find(query);
@@ -87,7 +103,7 @@ async function run() {
       res.send(result);
     });
 
-    app.patch('/booking/:id', async (req, res) => {
+    app.patch('/booking/:id', verifyToken, async (req, res) => {
       const { id } = req.params;
       const updatedData = req.body;
 
@@ -95,11 +111,10 @@ async function run() {
         { _id: new ObjectId(id) },
         { $set: updatedData },
       );
-
       res.send(result);
     });
 
-    app.delete('/booking/:id', async (req, res) => {
+    app.delete('/booking/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await bookingCollection.deleteOne(query);
