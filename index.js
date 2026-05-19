@@ -30,7 +30,30 @@ async function run() {
     const bookingCollection = db.collection('booking');
 
     app.get('/doctors', async (req, res) => {
-      const cursor = doctorsCollection.find();
+      const { searchTerm } = req.query;
+      let cursor;
+
+      if (searchTerm) {
+        cursor = doctorsCollection.find({
+          $or: [
+            {
+              name: {
+                $regex: searchTerm,
+                $options: 'i',
+              },
+            },
+            {
+              specialty: {
+                $regex: searchTerm,
+                $options: 'i',
+              },
+            },
+          ],
+        });
+      } else {
+        cursor = doctorsCollection.find();
+      }
+
       const result = await cursor.toArray();
       res.send(result);
     });
